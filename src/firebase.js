@@ -59,6 +59,50 @@ export const saveTestResult = async (result) => {
   }
 };
 
+export const isNameTaken = async (name) => {
+  const normalizedName = name.trim().toLowerCase();
+
+  if (!IS_CONFIGURED) {
+    const existing = JSON.parse(localStorage.getItem('test_results') || '[]');
+    return existing.some(r => r.userName && r.userName.trim().toLowerCase() === normalizedName);
+  }
+
+  try {
+    const snapshot = await get(ref(db, 'results'));
+    if (!snapshot.exists()) return false;
+
+    const results = snapshot.val();
+    return Object.values(results).some(r =>
+      r.userName && r.userName.trim().toLowerCase() === normalizedName
+    );
+  } catch (err) {
+    console.error("Error checking name uniqueness:", err);
+    return false;
+  }
+};
+
+export const deleteTestResults = async (testId) => {
+  if (!IS_CONFIGURED) return;
+  try {
+    const snapshot = await get(ref(db, 'results'));
+    if (!snapshot.exists()) return;
+
+    const results = snapshot.val();
+    const deletePromises = [];
+
+    Object.entries(results).forEach(([key, value]) => {
+      if (value.testId === testId) {
+        deletePromises.push(set(ref(db, `results/${key}`), null));
+      }
+    });
+
+    await Promise.all(deletePromises);
+  } catch (err) {
+    console.error("Firebase Delete Results Error:", err);
+    throw err;
+  }
+};
+
 export const getTestResults = async () => {
   if (!IS_CONFIGURED) {
     const data = localStorage.getItem('test_results');
@@ -123,5 +167,50 @@ export const getGoogleDriveDirectLink = (url) => {
   return url;
 };
 
+export const saveQuizContent = async (quizData) => {
+  if (!IS_CONFIGURED) {
+    const id = crypto.randomUUID();
+    const existing = JSON.parse(localStorage.getItem('quizzes') || '{}');
+    existing[id] = quizData;
+    localStorage.setItem('quizzes', JSON.stringify(existing));
+    return id;
+  }
+  try {
+    const res = await push(ref(db, 'quizzes'), quizData);
+    return res.key;
+  } catch (err) {
+    console.error("Firebase Save Quiz Error:", err);
+    throw err;
+  }
+};
+
+export const getQuizContent = async (quizId) => {
+  if (!IS_CONFIGURED) {
+    const existing = JSON.parse(localStorage.getItem('quizzes') || '{}');
+    return existing[quizId] || null;
+  }
+  try {
+    const snapshot = await get(ref(db, `quizzes/${quizId}`));
+    return snapshot.val();
+  } catch (err) {
+    console.error("Firebase Get Quiz Error:", err);
+    throw err;
+  }
+};
+
+export const deleteQuizContent = async (quizId) => {
+  if (!IS_CONFIGURED) {
+    const existing = JSON.parse(localStorage.getItem('quizzes') || '{}');
+    delete existing[quizId];
+    localStorage.setItem('quizzes', JSON.stringify(existing));
+    return;
+  }
+  try {
+    await set(ref(db, `quizzes/${quizId}`), null);
+  } catch (err) {
+    console.error("Firebase Delete Quiz Error:", err);
+    throw err;
+  }
+};
 
 export const ADMIN_PASSWORD = "admin123"; // Initial fixed password as requested

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Check, X, AlertCircle, Loader2 } from 'lucide-react';
-import { getGoogleDriveDirectLink, saveTestResult } from '../firebase';
+import { getGoogleDriveDirectLink, saveTestResult, isNameTaken, getQuizContent } from '../firebase';
 
 const STORAGE_PREFIX = 'quiz_v1_';
 
@@ -19,6 +19,8 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
     const [userName, setUserName] = useState(localStorage.getItem('user_name') || '');
     const [showNamePrompt, setShowNamePrompt] = useState(false);
     const [finishing, setFinishing] = useState(false);
+    const [checkingName, setCheckingName] = useState(false);
+    const [nameError, setNameError] = useState('');
     const finishGuardRef = useRef(false);
 
     // Initial Load
@@ -32,63 +34,79 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
             setLoading(true);
             try {
                 // 1. Fetch Quiz Data
-                let normalizedUrl = testUrl.trim();
+                let data;
 
-                // If the URL is just a filename (no slash and no http), prepend /tests/
-                if (!normalizedUrl.includes('/') && !normalizedUrl.includes('://')) {
-                    normalizedUrl = `/tests/${normalizedUrl}`;
-                }
-
-                // Common mistake: including '/public/' in the path
-                if (normalizedUrl.startsWith('/public/')) {
-                    normalizedUrl = normalizedUrl.replace('/public/', '/');
-                } else if (normalizedUrl.startsWith('public/')) {
-                    normalizedUrl = normalizedUrl.replace('public/', '/');
-                }
-
-                // Convert Google Drive view links to direct download links if necessary
-                let directUrl = getGoogleDriveDirectLink(normalizedUrl);
-
-                console.log("Fetching quiz from:", directUrl);
-
-                let response;
-                try {
-                    response = await fetch(directUrl);
-
-                    // Fallback for Google Drive CORS issues
-                    if (!response.ok && directUrl.includes('drive.google.com')) {
-                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
-                        response = await fetch(proxyUrl);
+                if (testUrl.startsWith('fb:')) {
+                    const quizId = testUrl.substring(3);
+                    data = await getQuizContent(quizId);
+                    if (!data) {
+                        throw new Error(`Вміст тесту не знайдено в Firebase (ID: ${quizId}).`);
                     }
-                } catch (fetchErr) {
-                    if (directUrl.includes('drive.google.com')) {
-                        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
-                        response = await fetch(proxyUrl);
-                    } else {
-                        throw fetchErr;
+                } else {
+                    let normalizedUrl = testUrl.trim();
+
+                    // If the URL is just a filename (no slash and no http), prepend /tests/
+                    if (!normalizedUrl.includes('/') && !normalizedUrl.includes('://')) {
+                        normalizedUrl = `/tests/${normalizedUrl}`;
                     }
-                }
 
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        throw new Error(`Файл не знайдено за адресою: ${directUrl}. Перевірте шлях в адмінці.`);
+                    // Common mistake: including '/public/' in the path
+                    if (normalizedUrl.startsWith('/public/')) {
+                        normalizedUrl = normalizedUrl.replace('/public/', '/');
+                    } else if (normalizedUrl.startsWith('public/')) {
+                        normalizedUrl = normalizedUrl.replace('public/', '/');
                     }
-                    throw new Error(`Помилка сервера (${response.status}): Не вдалося завантажити дані тесту.`);
-                }
 
-                // Check if the response is actually a JSON file
-                const contentType = response.headers.get("content-type");
-                if (contentType && contentType.includes("text/html")) {
-                    throw new Error(`Замість JSON отримано HTML. Можливо, шлях "${directUrl}" вказано неправильно і сервер повернув головну сторінку.`);
-                }
+                    // Convert Google Drive view links to direct download links if necessary
+                    let directUrl = getGoogleDriveDirectLink(normalizedUrl);
 
-                const data = await response.json();
+                    console.log("Fetching quiz from:", directUrl);
+
+                    let response;
+                    try {
+                        response = await fetch(directUrl);
+
+                        // Fallback for Google Drive CORS issues
+                        if (!response.ok && directUrl.includes('drive.google.com')) {
+                            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
+                            response = await fetch(proxyUrl);
+                        }
+                    } catch (fetchErr) {
+                        if (directUrl.includes('drive.google.com')) {
+                            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
+                            response = await fetch(proxyUrl);
+                        } else {
+                            throw fetchErr;
+                        }
+                    }
+
+                    if (!response.ok) {
+                        if (response.status === 404) {
+                            throw new Error(`Файл не знайдено за адресою: ${directUrl}. Перевірте шлях в адмінці.`);
+                        }
+                        throw new Error(`Помилка сервера (${response.status}): Не вдалося завантажити дані тесту.`);
+                    }
+
+                    // Check if the response is actually a JSON file
+                    const contentType = response.headers.get("content-type");
+                    if (contentType && contentType.includes("text/html")) {
+                        throw new Error(`Замість JSON отримано HTML. Можливо, шлях "${directUrl}" вказано неправильно і сервер повернув головну сторінку.`);
+                    }
+
+                    data = await response.json();
+                }
 
                 if (!data.quiz || !Array.isArray(data.quiz)) {
                     throw new Error('Неправильний формат файлу тесту (відсутнє поле "quiz").');
                 }
 
-                setQuizData(data);
+                // Shuffle answers for each question
+                const shuffledQuiz = data.quiz.map(q => ({
+                    ...q,
+                    answerOptions: shuffleArray([...q.answerOptions])
+                }));
+
+                setQuizData({ ...data, quiz: shuffledQuiz });
 
                 // 2. Load Progress from LocalStorage
                 const storageKey = `${STORAGE_PREFIX}${testId}`;
@@ -143,6 +161,14 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
         };
         localStorage.setItem(`${STORAGE_PREFIX}${testId}`, JSON.stringify(state));
     }, [answers, hints, currentQuestionIndex, isCompleted, quizData, testId, startTime]);
+
+    const shuffleArray = (array) => {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    };
 
 
     const initializeState = (length) => {
@@ -270,31 +296,33 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
                         type="text"
                         placeholder="Ваше ім'я"
                         value={userName}
-                        onChange={(e) => setUserName(e.target.value)}
-                        onKeyPress={(e) => {
-                            if (e.key === 'Enter' && userName.trim()) {
-                                localStorage.setItem('user_name', userName.trim());
-                                setShowNamePrompt(false);
+                        onChange={(e) => {
+                            setUserName(e.target.value);
+                            setNameError('');
+                        }}
+                        onKeyPress={async (e) => {
+                            if (e.key === 'Enter' && userName.trim() && !checkingName) {
+                                handleStart();
                             }
                         }}
                         style={{
-                            padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--glass-border)',
-                            background: 'rgba(255,255,255,0.03)', color: 'white', textAlign: 'center'
+                            padding: '12px 16px', borderRadius: '12px', border: nameError ? '1px solid #ef4444' : '1px solid var(--glass-border)',
+                            background: 'rgba(255,255,255,0.03)', color: 'white', textAlign: 'center', outline: 'none'
                         }}
                     />
+                    {nameError && <p style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '-0.5rem' }}>{nameError}</p>}
                     <button
-                        disabled={!userName.trim()}
-                        onClick={() => {
-                            localStorage.setItem('user_name', userName.trim());
-                            setShowNamePrompt(false);
-                        }}
+                        disabled={!userName.trim() || checkingName}
+                        onClick={handleStart}
                         style={{
                             padding: '12px', borderRadius: '12px', border: 'none',
                             background: 'var(--accent-color)', color: 'white', fontWeight: 600,
-                            opacity: userName.trim() ? 1 : 0.5, cursor: userName.trim() ? 'pointer' : 'not-allowed'
+                            opacity: (userName.trim() && !checkingName) ? 1 : 0.5, cursor: (userName.trim() && !checkingName) ? 'pointer' : 'not-allowed',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
                         }}
                     >
-                        Почати тест
+                        {checkingName && <Loader2 size={16} className="animate-spin" />}
+                        {checkingName ? 'Перевірка...' : 'Почати тест'}
                     </button>
                     <button
                         onClick={onBack}
@@ -305,6 +333,29 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
                 </div>
             </div>
         );
+    }
+
+    async function handleStart() {
+        if (!userName.trim() || checkingName) return;
+
+        setCheckingName(true);
+        setNameError('');
+        try {
+            const taken = await isNameTaken(userName.trim());
+            if (taken) {
+                setNameError('Це ім\'я вже зайняте в цьому тесті. Будь ласка, оберіть інше.');
+                return;
+            }
+            localStorage.setItem('user_name', userName.trim());
+            setShowNamePrompt(false);
+        } catch (err) {
+            console.error("Name check error:", err);
+            // On error, let them through to avoid blocking
+            localStorage.setItem('user_name', userName.trim());
+            setShowNamePrompt(false);
+        } finally {
+            setCheckingName(false);
+        }
     }
 
     if (error) {

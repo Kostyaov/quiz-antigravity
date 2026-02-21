@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Lock, Save, ArrowLeft, Loader2, Plus } from 'lucide-react';
-import { getAppConfig, saveAppConfig, ADMIN_PASSWORD } from '../firebase';
+import { getAppConfig, saveAppConfig, ADMIN_PASSWORD, deleteTestResults, saveQuizContent, deleteQuizContent } from '../firebase';
 
 export default function AdminPage() {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -21,6 +21,9 @@ export default function AdminPage() {
     const [activeSeason, setActiveSeason] = useState("12");
     const [status, setStatus] = useState(''); // '', 'saving', 'saved', 'error'
     const [error, setError] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [newTest, setNewTest] = useState({ name: '', url: '' });
 
     useEffect(() => {
         if (isLoggedIn) {
@@ -89,6 +92,69 @@ export default function AdminPage() {
             setTimeout(() => setStatus(''), 3000);
         } catch (err) {
             setStatus('error');
+        }
+    };
+
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setSelectedFile(file);
+            // Auto-fill name if empty
+            if (!newTest.name) {
+                const fileName = file.name.replace(/\.[^/.]+$/, "");
+                setNewTest(prev => ({ ...prev, name: fileName }));
+            }
+        }
+    };
+
+    const handleAddTest = async () => {
+        if (!newTest.name || (!newTest.url && !selectedFile)) {
+            alert("Будь ласка, заповніть назву та виберіть файл або вкажіть URL");
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            let finalUrl = newTest.url;
+
+            if (selectedFile) {
+                const content = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            resolve(JSON.parse(e.target.result));
+                        } catch (err) {
+                            reject(new Error("Неправильний формат JSON файлу"));
+                        }
+                    };
+                    reader.onerror = () => reject(new Error("Помилка при читанні файлу"));
+                    reader.readAsText(selectedFile);
+                });
+
+                const quizId = await saveQuizContent(content);
+                finalUrl = `fb:${quizId}`;
+            }
+
+            const currentTests = config.seasons[activeSeason]?.sessions[activeTab]?.tests;
+            const testsArray = Array.isArray(currentTests) ? currentTests : [];
+
+            const testToAdd = {
+                id: crypto.randomUUID(),
+                name: newTest.name,
+                url: finalUrl,
+                createdAt: Date.now()
+            };
+
+            updateSessionField(activeTab, 'tests', [...testsArray, testToAdd]);
+
+            // Reset form
+            setNewTest({ name: '', url: '' });
+            setSelectedFile(null);
+            // Reset file input if possible (via ref usually, but we can just rely on state for now)
+        } catch (err) {
+            alert('Помилка при додаванні тесту: ' + err.message);
+        } finally {
+            setIsUploading(false);
         }
     };
 
@@ -330,10 +396,26 @@ export default function AdminPage() {
                                             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{test.url}</div>
                                         </div>
                                         <button
-                                            onClick={() => {
-                                                const currentTests = config.seasons[activeSeason].sessions[activeTab].tests;
-                                                const newTests = currentTests.filter((_, i) => i !== index);
-                                                updateSessionField(activeTab, 'tests', newTests);
+                                            onClick={async () => {
+                                                if (window.confirm(`Ви впевнені, що хочете видалити тест "${test.name}"? Всі результати цього тесту в базі даних та сам файл тесту також будуть видалені. Цю дію неможливо скасувати.`)) {
+                                                    try {
+                                                        // 1. Delete Results from Firebase
+                                                        await deleteTestResults(test.id);
+
+                                                        // 2. Delete Quiz Content from Firebase if applicable
+                                                        if (test.url && test.url.startsWith('fb:')) {
+                                                            const quizId = test.url.substring(3);
+                                                            await deleteQuizContent(quizId);
+                                                        }
+
+                                                        // 3. Update configuration
+                                                        const currentTests = config.seasons[activeSeason].sessions[activeTab].tests;
+                                                        const newTests = currentTests.filter((_, i) => i !== index);
+                                                        updateSessionField(activeTab, 'tests', newTests);
+                                                    } catch (err) {
+                                                        alert("Помилка при видаленні: " + err.message);
+                                                    }
+                                                }
                                             }}
                                             style={{ color: '#ef4444', background: 'none', border: 'none', padding: '4px', cursor: 'pointer' }}
                                             title="Видалити"
@@ -350,63 +432,61 @@ export default function AdminPage() {
                         </div>
 
                         {/* Add new test form */}
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                            <input
-                                type="text"
-                                placeholder="Назва тесту"
-                                id="new-test-name"
-                                style={{
-                                    flex: 1, padding: '10px', borderRadius: '8px',
-                                    border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'white', fontSize: '0.875rem'
-                                }}
-                            />
-                            <input
-                                type="text"
-                                placeholder="URL JSON файлу"
-                                id="new-test-url"
-                                style={{
-                                    flex: 2, padding: '10px', borderRadius: '8px',
-                                    border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'white', fontSize: '0.875rem'
-                                }}
-                            />
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', width: '100%', marginTop: '4px' }}>
-                                💡 Файли тестів мають зберігатися в папці <code>/public/tests/</code>. Вводьте тільки назву файлу.
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px dashed var(--glass-border)' }}>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Назва тесту (напр. Гідравліка)"
+                                    value={newTest.name}
+                                    onChange={(e) => setNewTest(prev => ({ ...prev, name: e.target.value }))}
+                                    style={{
+                                        flex: 1, padding: '12px', borderRadius: '10px',
+                                        border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'white'
+                                    }}
+                                />
+                                <button
+                                    onClick={handleAddTest}
+                                    disabled={isUploading || (!newTest.name || (!newTest.url && !selectedFile))}
+                                    style={{
+                                        padding: '0 24px', borderRadius: '10px', border: 'none',
+                                        background: 'var(--accent-color)', color: 'white', fontWeight: 600,
+                                        opacity: (isUploading || (!newTest.name || (!newTest.url && !selectedFile))) ? 0.5 : 1,
+                                        cursor: (isUploading || (!newTest.name || (!newTest.url && !selectedFile))) ? 'not-allowed' : 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: '8px'
+                                    }}
+                                >
+                                    {isUploading ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
+                                    {isUploading ? 'Завантаження...' : 'Додати'}
+                                </button>
                             </div>
-                            <button
-                                onClick={() => {
-                                    const nameInput = document.getElementById('new-test-name');
-                                    const urlInput = document.getElementById('new-test-url');
-                                    const name = nameInput.value.trim();
-                                    const url = urlInput.value.trim();
 
-                                    if (name && url) {
-                                        const currentTests = config.seasons[activeSeason]?.sessions[activeTab]?.tests;
-                                        // Ensure it's an array (handle migration from string if needed, though we default to [])
-                                        const testsArray = Array.isArray(currentTests) ? currentTests : [];
-
-                                        const newTest = {
-                                            id: crypto.randomUUID(), // Standard UUID
-                                            name,
-                                            url,
-                                            createdAt: Date.now()
-                                        };
-
-                                        updateSessionField(activeTab, 'tests', [...testsArray, newTest]);
-
-                                        // Clear inputs
-                                        nameInput.value = '';
-                                        urlInput.value = '';
-                                    } else {
-                                        alert("Будь ласка, заповніть назву та URL");
-                                    }
-                                }}
-                                style={{
-                                    padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)',
-                                    background: 'var(--accent-color)', color: 'white', cursor: 'pointer'
-                                }}
-                            >
-                                <Plus size={18} />
-                            </button>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Варіант 1: Завантажити JSON файл (рекомендовано)</label>
+                                    <input
+                                        type="file"
+                                        accept=".json"
+                                        onChange={handleFileChange}
+                                        style={{
+                                            fontSize: '0.875rem', color: 'var(--text-secondary)',
+                                            padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--glass-border)'
+                                        }}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Варіант 2: Вказати URL або шлях</label>
+                                    <input
+                                        type="text"
+                                        placeholder="test.json або https://..."
+                                        value={newTest.url}
+                                        onChange={(e) => setNewTest(prev => ({ ...prev, url: e.target.value }))}
+                                        style={{
+                                            padding: '10px', borderRadius: '8px',
+                                            border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'white', fontSize: '0.875rem'
+                                        }}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
