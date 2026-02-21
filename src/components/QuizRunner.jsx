@@ -511,9 +511,9 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
     // Let's rely on `answers` content. If an answer is selected, it's locked.
 
     return (
-        <div className="fade-in quiz-container" style={{ maxWidth: '800px', margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div className="fade-in quiz-container" style={{ maxWidth: '800px', margin: '0 auto', height: '100%', minHeight: 'min-content', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
             {/* Header */}
-            <div className="quiz-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '8px' }}>
+            <div className="quiz-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '8px', flexShrink: 0 }}>
                 <div className="progress-text" style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                     {currentQuestionIndex + 1} / {quizData.quiz.length}
                 </div>

@@ -378,9 +378,9 @@ export default function MainPage() {
                             <h2 style={{ fontSize: '1.25rem' }}>{SESSION_LABELS[activeSession]} — {activeAction.label}</h2>
                         </div>
 
-                        <div style={{ flex: 1, background: 'var(--bg-color)' }}>
+                        <div style={{ flex: 1, background: 'var(--bg-color)', overflowY: 'auto', position: 'relative' }}>
                             {loading ? (
-                                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justify: 'center' }}>
+                                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     Завантаження...
                                 </div>
                             ) : (
@@ -503,7 +503,7 @@ function StatisticsView({ activeSession, activeSeason }) {
     });
 
     return (
-        <div style={{ padding: '1.5rem', height: '100%', overflowY: 'auto' }}>
+        <div className="fade-in" style={{ padding: '1.5rem', height: '100%', overflowY: 'auto' }}>
             {/* Aggregate Header */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                 <div className="glass" style={{ padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
