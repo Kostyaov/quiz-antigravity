@@ -374,8 +374,16 @@ export default function MainPage() {
                         display: 'flex',
                         flexDirection: 'column'
                     }}>
-                        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--glass-border)' }}>
-                            <h2 style={{ fontSize: '1.25rem' }}>{SESSION_LABELS[activeSession]} — {activeAction.label}</h2>
+                        <div className={`section-header ${activeAction.id === 'tests' ? 'tests-header' : ''}`} style={{
+                            padding: '1.5rem',
+                            borderBottom: '1px solid var(--glass-border)',
+                            display: activeAction.id === 'tests' && !activeQuiz ? 'none' : 'block'
+                        }}>
+                            <h2 style={{ fontSize: '1.25rem' }}>
+                                {activeAction.id === 'tests' && activeQuiz
+                                    ? activeQuiz.name
+                                    : `${SESSION_LABELS[activeSession]} — ${activeAction.label}`}
+                            </h2>
                         </div>
 
                         <div style={{ flex: 1, background: 'var(--bg-color)', overflowY: 'auto', position: 'relative' }}>
@@ -429,6 +437,9 @@ export default function MainPage() {
           }
           .glass.fade-in {
             border-radius: 16px !important;
+          }
+          .tests-header {
+            display: none !important;
           }
         }
       `}</style>
