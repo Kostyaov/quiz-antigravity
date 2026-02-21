@@ -1,16 +1,37 @@
-# ames-ups-statistik
+# Quiz Antigravity (ames-ups-statistik) - v1.0.0
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Прогресивна веб-система для проведення тестів та перегляду навчальних матеріалів для проекту "AMES-UPS".
 
-Currently, two official plugins are available:
+## Основні можливості (v1.0.0 Stable)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Адмін-панель**: Повне керування контентом сесій (фото, лекції, презентації, тести).
+- **Firebase Quiz Storage**: Пряме завантаження JSON-файлів тестів через браузер без використання FTP/SSH.
+- **Масштабованість**: Підтримка різних сезонів та сесій.
+- **Статистика**: Автоматичне збереження результатів у Firebase Realtime Database та відправка в Google Sheets.
+- **Answer Shuffling**: Випадковий порядок варіантів відповідей для кожного проходження.
+- **Name Uniqueness**: Перевірка імені користувача перед початком тесту для запобігання дублікатів.
+- **Linked Deletion**: Автоматичне видалення результатів та контенту при видаленні тесту.
+- **Дизайн**: Сучасний "скляний" Glassmorphism інтерфейс із підтримкою темної теми.
 
-## React Compiler
+## Технологічний стек
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Frontend**: React 19, Vite, Lucide React.
+- **Backend/DB**: Firebase Realtime Database.
+- **Hosting/Deployment**: Підтримує будь-яке статичне оточення або VPS (через `npm run build`).
 
-## Expanding the ESLint configuration
+## Як почати роботу
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Локально
+1. Встановіть залежності: `npm install`
+2. Запустіть сервер розробки: `npm run dev`
+
+### Деплой
+1. Зберіть проект: `npm run build`
+2. Скопіюйте вміст папки `dist` на ваш сервер.
+
+## Документація
+Детальний опис налаштування Firebase та структури бази даних знаходиться у файлі [dok.md](./dok.md).
+Для довідки по роботі з Firebase Console використовуйте [firebase_help.md](./firebase_help.md).
+
+---
+**Stable Version Tag:** `v1.0-stable`
