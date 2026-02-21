@@ -230,8 +230,8 @@ export default function AdminPage() {
     }
 
     return (
-        <div style={{ minHeight: '100vh', padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-            <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem' }}>
+        <div className="admin-container" style={{ minHeight: '100vh', padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+            <header className="admin-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3rem', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <a href="/" style={{ color: 'var(--text-secondary)' }}><ArrowLeft size={24} /></a>
                     <h1 style={{ fontSize: '1.5rem' }}>Налаштування</h1>
@@ -239,6 +239,7 @@ export default function AdminPage() {
                 <button
                     onClick={handleSave}
                     disabled={status === 'saving'}
+                    className="save-button"
                     style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -249,11 +250,12 @@ export default function AdminPage() {
                         background: status === 'saved' ? '#10b981' : 'var(--accent-color)',
                         color: 'white',
                         fontWeight: 600,
-                        opacity: status === 'saving' ? 0.7 : 1
+                        opacity: status === 'saving' ? 0.7 : 1,
+                        whiteSpace: 'nowrap'
                     }}
                 >
                     {status === 'saving' ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                    {status === 'saved' ? 'Збережено' : 'Зберегти зміни'}
+                    <span className="save-button-text">{status === 'saved' ? 'Збережено' : 'Зберегти зміни'}</span>
                 </button>
             </header>
 
@@ -460,7 +462,7 @@ export default function AdminPage() {
                                 </button>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="test-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Варіант 1: Завантажити JSON файл (рекомендовано)</label>
                                     <input
@@ -499,6 +501,33 @@ export default function AdminPage() {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+          .admin-container {
+            padding: 1rem !important;
+          }
+          .admin-header h1 {
+            font-size: 1.25rem;
+          }
+          .save-button {
+             padding: 10px !important;
+          }
+          .save-button-text {
+            display: none;
+          }
+          .save-button::after {
+            content: "${status === 'saved' ? 'Збережено' : 'Зберегти'}";
+            margin-left: 4px;
+            font-size: 0.9rem;
+          }
+          .glass.fade-in {
+            padding: 1rem !important;
+            border-radius: 16px !important;
+          }
+          .test-form-grid {
+            grid-template-columns: 1fr !important;
+          }
         }
       `}</style>
         </div >

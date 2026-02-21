@@ -74,3 +74,54 @@ input {
 .fade-in {
   animation: fadeIn 0.4s ease forwards;
 }
+
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+  :root {
+    --sidebar-width: 0px; /* Sidebar will be hidden or overlay on mobile */
+  }
+
+  .glass {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --header-height: 60px;
+  }
+
+  body {
+    font-size: 14px;
+    /* Prevent horizontal bounce on some mobile browsers */
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  /* Padding adjustments for mobile */
+  .mobile-p-1 { padding: 1rem !important; }
+  .mobile-p-05 { padding: 0.5rem !important; }
+}
+
+/* Utility for horizontal scrolling on mobile tabs */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Touch targets optimization */
+@media (pointer: coarse) {
+  button, 
+  .clickable {
+    min-height: 44px;
+  }
+  
+  input, 
+  select {
+    font-size: 16px !important; /* Prevents auto-zoom on iOS */
+  }
+}

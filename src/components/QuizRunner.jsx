@@ -286,7 +286,7 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
 
     if (showNamePrompt) {
         return (
-            <div className="glass fade-in" style={{ padding: '2rem', maxWidth: '400px', margin: '4rem auto', borderRadius: '24px', textAlign: 'center' }}>
+            <div className="glass fade-in name-prompt-container" style={{ padding: '2rem', maxWidth: '400px', margin: '4rem auto', borderRadius: '24px', textAlign: 'center' }}>
                 <h3 style={{ marginBottom: '1.5rem' }}>Перед початком</h3>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
                     Будь ласка, введіть ваше ім'я або нікнейм для збереження результатів.
@@ -436,7 +436,7 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
+                <div className="results-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
                     <div className="glass" style={{ padding: '1rem', borderRadius: '12px' }}>
                         <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Правильних відповідей</div>
                         <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{correctCount} / {totalQuestions}</div>
@@ -511,11 +511,11 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
     // Let's rely on `answers` content. If an answer is selected, it's locked.
 
     return (
-        <div className="fade-in" style={{ maxWidth: '800px', margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div className="fade-in quiz-container" style={{ maxWidth: '800px', margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <div style={{ color: 'var(--text-secondary)' }}>
-                    Питання {currentQuestionIndex + 1} з {quizData.quiz.length}
+            <div className="quiz-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '8px' }}>
+                <div className="progress-text" style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                    {currentQuestionIndex + 1} / {quizData.quiz.length}
                 </div>
                 <div style={{
                     flex: 1, margin: '0 1.5rem', height: '8px', background: 'var(--surface-color)', borderRadius: '4px', overflow: 'hidden'
@@ -674,6 +674,38 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
                     </button>
                 )}
             </div>
+            <style>{`
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+          .quiz-container {
+            padding: 0.5rem !important;
+          }
+          .quiz-header {
+             margin-bottom: 1rem !important;
+          }
+          .progress-text {
+            font-size: 0.75rem !important;
+          }
+          h2 {
+            font-size: 1.1rem !important;
+            margin-bottom: 1.5rem !important;
+          }
+          .results-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .name-prompt-container {
+            margin: 1rem !important;
+            padding: 1.5rem !important;
+          }
+        }
+      `}</style>
         </div>
     );
 }

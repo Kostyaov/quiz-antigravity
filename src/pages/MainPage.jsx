@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-import { Layout, Image, FileText, Presentation, ClipboardCheck, Settings, LogOut, Sun, Moon, BarChart2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Layout, Image, FileText, Presentation, ClipboardCheck, Settings, LogOut, Sun, Moon, BarChart2, ChevronDown, ChevronUp, Menu, X as CloseIcon } from 'lucide-react';
 import { getAppConfig, getYoutubeVideoId, getGoogleDriveFolderId, getTestResults } from '../firebase';
 import QuizRunner from '../components/QuizRunner';
 
@@ -25,6 +25,7 @@ export default function MainPage() {
     const [config, setConfig] = useState(null);
     const [loading, setLoading] = useState(true);
     const [theme, setTheme] = useState('dark');
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     // Reset active quiz when switching session or tab
     useEffect(() => {
@@ -191,14 +192,30 @@ export default function MainPage() {
     };
 
     return (
-        <div style={{ display: 'flex', height: '100vh', width: '100vw' }}>
+        <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', position: 'relative' }}>
+            {/* Mobile Sidebar Overlay */}
+            {isMobileMenuOpen && (
+                <div
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    style={{
+                        position: 'absolute',
+                        top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.5)',
+                        zIndex: 90,
+                        backdropFilter: 'blur(4px)'
+                    }}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="glass" style={{
+            <aside className={`glass ${isMobileMenuOpen ? 'mobile-open' : ''}`} style={{
                 width: 'var(--sidebar-width)',
                 display: 'flex',
                 flexDirection: 'column',
                 padding: '2rem 1rem',
-                zIndex: 10
+                zIndex: 100,
+                transition: 'transform 0.3s ease',
+                position: 'relative'
             }}>
 
                 <div style={{ marginBottom: '3rem', padding: '0 1rem' }}>
@@ -232,7 +249,10 @@ export default function MainPage() {
                     {ACTIONS.map(action => (
                         <button
                             key={action.id}
-                            onClick={() => setActiveAction(action)}
+                            onClick={() => {
+                                setActiveAction(action);
+                                setIsMobileMenuOpen(false);
+                            }}
                             style={{
                                 width: '100%',
                                 display: 'flex',
@@ -288,37 +308,65 @@ export default function MainPage() {
             </aside>
 
             {/* Main Content */}
-            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', width: '100%', overflow: 'hidden' }}>
                 {/* Header */}
-                <header className="glass" style={{
+                <header className="glass header-responsive" style={{
                     height: 'var(--header-height)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '20px',
-                    padding: '0 2rem'
+                    gap: '12px',
+                    padding: '0 1rem'
                 }}>
-                    {SESSIONS.map(session => (
-                        <button
-                            key={session}
-                            onClick={() => setActiveSession(session)}
-                            style={{
-                                padding: '8px 24px',
-                                borderRadius: '99px',
-                                border: activeSession === session ? '1px solid var(--accent-color)' : '1px solid transparent',
-                                background: activeSession === session ? 'rgba(99, 102, 241, 0.1)' : 'var(--surface-color)',
-                                color: activeSession === session ? 'var(--accent-color)' : 'var(--text-secondary)',
-                                fontWeight: 600,
-                                fontSize: '0.875rem'
-                            }}
-                        >
-                            {SESSION_LABELS[session]}
-                        </button>
-                    ))}
+                    {/* Mobile Menu Toggle */}
+                    <button
+                        className="mobile-only"
+                        onClick={() => setIsMobileMenuOpen(true)}
+                        style={{
+                            position: 'absolute',
+                            left: '1rem',
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-primary)',
+                            padding: '8px'
+                        }}
+                    >
+                        <Menu size={24} />
+                    </button>
+
+                    <div className="no-scrollbar" style={{
+                        display: 'flex',
+                        gap: '8px',
+                        overflowX: 'auto',
+                        padding: '4px',
+                        maxWidth: '100%',
+                        justifyContent: 'center'
+                    }}>
+                        {SESSIONS.map(session => (
+                            <button
+                                key={session}
+                                onClick={() => setActiveSession(session)}
+                                style={{
+                                    padding: '8px 16px',
+                                    borderRadius: '99px',
+                                    border: activeSession === session ? '1px solid var(--accent-color)' : '1px solid transparent',
+                                    background: activeSession === session ? 'rgba(99, 102, 241, 0.1)' : 'var(--surface-color)',
+                                    color: activeSession === session ? 'var(--accent-color)' : 'var(--text-secondary)',
+                                    fontWeight: 600,
+                                    fontSize: '0.8rem',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                {SESSION_LABELS[session].replace('Сесія', 'С')}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="mobile-only" style={{ width: '40px' }} /> {/* Spacer to balance header */}
                 </header>
 
                 {/* Content Area */}
-                <div style={{ flex: 1, padding: '2rem', overflow: 'hidden' }}>
+                <div className="content-padding" style={{ flex: 1, padding: '2rem', overflow: 'hidden' }}>
                     <div className="glass fade-in" style={{
                         height: '100%',
                         borderRadius: '24px',
@@ -347,6 +395,41 @@ export default function MainPage() {
         button:hover {
           background: var(--surface-hover);
           transform: translateY(-1px);
+        }
+
+        @media (max-width: 1024px) {
+          aside {
+            position: fixed !important;
+            height: 100vh;
+            width: 280px !important;
+            transform: translateX(-100%);
+          }
+          aside.mobile-open {
+            transform: translateX(0);
+          }
+          .header-responsive {
+            justify-content: center;
+          }
+          .mobile-only {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+          }
+        }
+
+        @media (min-width: 1025px) {
+          .mobile-only {
+            display: none !important;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .content-padding {
+            padding: 1rem !important;
+          }
+          .glass.fade-in {
+            border-radius: 16px !important;
+          }
         }
       `}</style>
         </div >
@@ -476,42 +559,44 @@ function StatisticsView({ activeSession, activeSeason }) {
                         {expandedTests[test.name] && (
                             <div className="fade-in" style={{
                                 marginTop: '0.5rem',
-                                marginLeft: '1rem',
+                                marginLeft: '0.5rem',
                                 background: 'rgba(0,0,0,0.1)',
                                 borderRadius: '12px',
                                 overflow: 'hidden',
                                 borderLeft: '3px solid var(--accent-color)'
                             }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-                                    <thead>
-                                        <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--glass-border)' }}>
-                                            <th style={{ padding: '10px 16px', color: 'var(--text-secondary)' }}>Користувач</th>
-                                            <th style={{ padding: '10px 16px', color: 'var(--text-secondary)' }}>Результат</th>
-                                            <th style={{ padding: '10px 16px', color: 'var(--text-secondary)' }}>Дата</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {test.attempts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).map((res, i) => (
-                                            <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                <td style={{ padding: '10px 16px', fontWeight: 500 }}>{res.userName}</td>
-                                                <td style={{ padding: '10px 16px' }}>
-                                                    <span style={{
-                                                        padding: '2px 8px',
-                                                        borderRadius: '6px',
-                                                        background: res.score >= 60 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                                        color: res.score >= 60 ? '#10b981' : '#ef4444',
-                                                        fontWeight: 600
-                                                    }}>
-                                                        {res.score}%
-                                                    </span>
-                                                </td>
-                                                <td style={{ padding: '10px 16px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                                                    {new Date(res.timestamp).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                </td>
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem', minWidth: '400px' }}>
+                                        <thead>
+                                            <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--glass-border)' }}>
+                                                <th style={{ padding: '10px 16px', color: 'var(--text-secondary)' }}>Користувач</th>
+                                                <th style={{ padding: '10px 16px', color: 'var(--text-secondary)' }}>Результат</th>
+                                                <th style={{ padding: '10px 16px', color: 'var(--text-secondary)' }}>Дата</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {test.attempts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).map((res, i) => (
+                                                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                    <td style={{ padding: '10px 16px', fontWeight: 500 }}>{res.userName}</td>
+                                                    <td style={{ padding: '10px 16px' }}>
+                                                        <span style={{
+                                                            padding: '2px 8px',
+                                                            borderRadius: '6px',
+                                                            background: res.score >= 60 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                            color: res.score >= 60 ? '#10b981' : '#ef4444',
+                                                            fontWeight: 600
+                                                        }}>
+                                                            {res.score}%
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '10px 16px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                                        {new Date(res.timestamp).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
                     </div>
