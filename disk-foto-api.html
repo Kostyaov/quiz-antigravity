@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Компактна галерея Google Drive</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f7fa;
+      color: #333;
+    }
+    h1 { text-align: center; color: #1a73e8; margin-bottom: 10px; }
+    .controls {
+      max-width: 1100px;
+      margin: 0 auto 30px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      align-items: center;
+    }
+    input, button {
+      padding: 12px 16px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 2px solid #dadce0;
+    }
+    input:focus { outline: none; border-color: #1a73e8; }
+    button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button:hover { background: #1557b0; }
+    .info { text-align: center; font-size: 0.95em; color: #555; margin: 10px 0 30px; }
+
+    #gallery {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      padding: 10px;
+    }
+    .photo {
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+    .photo:hover {
+      transform: scale(1.04);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    }
+    .photo img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Лайтбокс */
+    #lightbox {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.92);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    #lightbox img {
+      max-width: 92%;
+      max-height: 92vh;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    }
+    .close {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      font-size: 40px;
+      color: white;
+      cursor: pointer;
+      opacity: 0.8;
+    }
+    .close:hover { opacity: 1; }
+
+    .loading {
+      text-align: center;
+      font-size: 1.2em;
+      color: #666;
+      margin: 40px;
+    }
+    .error { color: #d93025; text-align: center; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<h1>Компактна галерея з Google Drive</h1>
+
+<div class="controls">
+  <input type="text" id="folderUrl" placeholder="Посилання на папку Google Drive" style="flex:1; min-width:300px;" />
+  <input type="text" id="apiKey" placeholder="Ваш Google API Key" style="min-width:280px;" />
+  <button onclick="loadGallery()">Відобразити галерею</button>
+</div>
+
+<div class="info">
+  Папка повинна мати доступ «Усі, хто має посилання» → «Переглядач»<br>
+  <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#1a73e8;">Як отримати API ключ (безкоштовно, 2 хвилини)</a>
+</div>
+
+<div id="status" class="loading"></div>
+<div id="gallery"></div>
+
+<!-- Лайтбокс -->
+<div id="lightbox">
+  <span class="close" onclick="closeLightbox()">×</span>
+  <img id="fullImage" onclick="closeLightbox()" />
+</div>
+
+<script>
+// Збереження налаштувань
+function saveSettings(folder, key) {
+  localStorage.setItem('driveFolder', folder);
+  localStorage.setItem('driveApiKey', key);
+}
+function loadSettings() {
+  document.getElementById('folderUrl').value = localStorage.getItem('driveFolder') || '';
+  document.getElementById('apiKey').value = localStorage.getItem('driveApiKey') || '';
+}
+
+// Завантаження при старті
+window.onload = () => {
+  loadSettings();
+  // Якщо є збережені дані — можна автоматично завантажити, але краще вручну
+};
+
+async function loadGallery() {
+  const urlInput = document.getElementById('folderUrl').value.trim();
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const status = document.getElementById('status');
+  const gallery = document.getElementById('gallery');
+
+  gallery.innerHTML = '';
+  status.textContent = 'Завантаження фото...';
+
+  if (!urlInput || !apiKey) {
+    status.textContent = 'Введіть посилання на папку та API ключ!';
+    status.className = 'error';
+    return;
+  }
+
+  // Витягуємо ID папки
+  const folderIdMatch = urlInput.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (!folderIdMatch) {
+    status.textContent = 'Неправильне посилання на папку!';
+    status.className = 'error';
+    return;
+  }
+  const folderId = folderIdMatch[1];
+
+  // Зберігаємо налаштування
+  saveSettings(urlInput, apiKey);
+
+  const query = encodeURIComponent(`'${folderId}' in parents and mimeType contains 'image/'`);
+  const apiUrl = `https://www.googleapis.com/drive/v3/files?key=${apiKey}&q=${query}&fields=files(id)&pageSize=1000&orderBy=createdTime`;
+
+  try {
+    const res = await fetch(apiUrl);
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error.message);
+
+    if (!data.files || data.files.length === 0) {
+      status.textContent = 'У папці немає фото (або перевірте доступність)';
+      return;
+    }
+
+    status.textContent = `Знайдено фото: ${data.files.length}`;
+
+    data.files.forEach(file => {
+      const div = document.createElement('div');
+      div.className = 'photo';
+      
+      const img = document.createElement('img');
+      img.src = `https://drive.google.com/thumbnail?id=${file.id}&sz=w260`; // компактна мініатюра
+      img.loading = 'lazy';
+      img.alt = 'Фото';
+      
+      div.onclick = () => showFullImage(file.id);
+      div.appendChild(img);
+      gallery.appendChild(div);
+    });
+
+  } catch (err) {
+    status.textContent = 'Помилка: ' + err.message + '\nПеревірте API ключ і що папка публічна';
+    status.className = 'error';
+  }
+}
+
+function showFullImage(fileId) {
+  const lightbox = document.getElementById('lightbox');
+  const fullImg = document.getElementById('fullImage');
+  
+  // Велике зображення (до 3000 пікселів — достатньо для більшості фото)
+  fullImg.src = `https://drive.google.com/thumbnail?id=${fileId}&sz=s3000`;
+  lightbox.style.display = 'flex';
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').style.display = 'none';
+}
+
+// Закриття лайтбокса по Esc і кліку поза зображенням
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLightbox();
+});
+document.getElementById('lightbox').addEventListener('click', e => {
+  if (e.target.id === 'lightbox') closeLightbox();
+});
+</script>
+
+</body>
+</html>

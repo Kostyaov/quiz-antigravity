@@ -297,20 +297,36 @@ export default function AdminPage() {
             </div>
 
             <div className="glass fade-in" style={{ padding: '2rem', borderRadius: '24px', marginBottom: '2rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.8rem', fontWeight: 600 }}>Google Script URL (для статистики)</label>
-                <input
-                    type="text"
-                    placeholder="https://script.google.com/macros/s/.../exec"
-                    value={config.googleScriptUrl || ""}
-                    onChange={(e) => setConfig(prev => ({ ...prev, googleScriptUrl: e.target.value }))}
-                    style={{
-                        width: '100%', padding: '12px', borderRadius: '12px',
-                        border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'white'
-                    }}
-                />
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                    Цей URL буде використано для всіх сесій для відправки результатів у Google Sheets.
-                </p>
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.8rem', fontWeight: 600 }}>Google Script URL (для статистики)</label>
+                    <input
+                        type="text"
+                        placeholder="https://script.google.com/macros/s/.../exec"
+                        value={config.googleScriptUrl || ""}
+                        onChange={(e) => setConfig(prev => ({ ...prev, googleScriptUrl: e.target.value }))}
+                        style={{
+                            width: '100%', padding: '12px', borderRadius: '12px',
+                            border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'white'
+                        }}
+                    />
+                </div>
+
+                <div>
+                    <label style={{ display: 'block', marginBottom: '0.8rem', fontWeight: 600 }}>Google Drive API Key</label>
+                    <input
+                        type="text"
+                        placeholder="AIzaSy..."
+                        value={config.googleDriveApiKey || ""}
+                        onChange={(e) => setConfig(prev => ({ ...prev, googleDriveApiKey: e.target.value }))}
+                        style={{
+                            width: '100%', padding: '12px', borderRadius: '12px',
+                            border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'white'
+                        }}
+                    />
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                        Цей ключ необхідний для надійної роботи галереї фото. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-color)', textDecoration: 'none' }}>Як отримати?</a>
+                    </p>
+                </div>
             </div>
 
             <div className="glass fade-in" style={{ padding: '2rem', borderRadius: '24px' }}>
@@ -342,7 +358,7 @@ export default function AdminPage() {
                             onChange={(e) => updateSessionField(activeTab, 'photos', e.target.value)}
                             style={{
                                 width: '100%', padding: '12px', borderRadius: '12px',
-                                border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'white'
+                                border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)'
                             }}
                         />
                     </div>
@@ -350,13 +366,17 @@ export default function AdminPage() {
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Лекції (YouTube Playlist URL)</label>
                         <input
                             type="text"
+                            placeholder="https://www.youtube.com/playlist?list=..."
                             value={config.seasons[activeSeason]?.sessions[activeTab]?.lectures || ""}
                             onChange={(e) => updateSessionField(activeTab, 'lectures', e.target.value)}
                             style={{
                                 width: '100%', padding: '12px', borderRadius: '12px',
-                                border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'white'
+                                border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)'
                             }}
                         />
+                        <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginTop: '0.5rem' }}>
+                            Вставте посилання на плейлист, щоб автоматично створити галерею відео.
+                        </p>
                     </div>
                     <div>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Презентації (Google Drive Folder ID)</label>
