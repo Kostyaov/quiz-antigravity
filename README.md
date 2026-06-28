@@ -1,40 +1,81 @@
-# Quiz Antigravity (v3.0.0) — Professional Edition
+# Quiz Antigravity
 
-Версія 3.0 — Максимальна функціональність, інтеграція з Google API та професійний деплой.
+Навчальна платформа для УМШ та пов’язаних подій: сезонів, літніх/весняних шкіл, з’їздів і окремих навчальних циклів.
 
-## Основні можливості (v3.0)
-- **Custom Photo Gallery**: Власна галерея зображень із Google Drive API. Швидке завантаження мініатюр та зручний перегляд у повний розмір.
-- **YouTube Video Gallery**: Автоматичне вбудовування плейлистів та окремих відео з YouTube за допомогою API.
-- **Advanced Admin Panel**:
-    - Пряме завантаження JSON-файлів тестів до Firebase.
-    - Управління структурою Сезонів та Сесій.
-    - Налаштування API ключів безпосередньо в інтерфейсі.
-- **Robust Statistics**: Автоматичне збереження результатів у Firebase Realtime Database та синхронізація з Google Sheets із дедуплікацією записів.
-- **Professional Deployment**: Повна підтримка деплою на VPS (Nginx, PM2) та статичне хостингу (Vercel/Netlify).
-- **Glassmorphism UI v3**: Оновлений "скляний" дизайн із покращеною видимістю тексту в світлій темі та повною мобільною адаптацією.
+Production-сайт:
 
-## Технологічний стек
+```text
+https://uames.pp.ua/
+```
 
-- **Frontend**: React 19, Vite, Lucide React, React Router DOM.
-- **Backend/DB**: Firebase Realtime Database.
-- **Integration**: Google Drive API, YouTube Data API v3, Google Apps Script.
-- **Hosting**: Статичний (Vite build) або VPS.
+Адмінка:
 
-## Як почати роботу
+```text
+https://uames.pp.ua/admin
+```
 
-### Локально
-1. Встановіть залежності: `npm install`
-2. Запустіть сервер розробки: `npm run dev`
+## Швидкий старт
 
-### Деплой на VPS
-Детальна інструкція знаходиться у файлі [vps_deploy.md](./vps_deploy.md).
+```bash
+npm install
+npm run dev
+```
+
+Локальна адреса зазвичай:
+
+```text
+http://localhost:5173/
+```
+
+Локальна адмінка:
+
+```text
+http://localhost:5173/admin
+```
+
+Локальний логін:
+
+```text
+admin@local.test / admin123
+```
+
+Локальний режим використовує `localStorage` і не змінює production Firebase.
+
+## Основні команди
+
+```bash
+npm run dev                # локальна розробка
+npm run lint               # перевірка коду
+npm run build              # production build у dist/
+npm run security:check     # перевірка Firebase rules і production bundle
+npm run deploy:vps:dry-run # репетиція деплою без змін на сервері
+npm run deploy:vps         # оновлення сайту https://uames.pp.ua/
+```
 
 ## Документація
 
-- [dok.md](./dok.md) — Детальна технічна документація та інструкція з відновлення.
-- [quiz_antigravity_all.md](./quiz_antigravity_all.md) — Повний технічний паспорт проекту.
-- [vps_deploy.md](./vps_deploy.md) — Посібник з розгортання на сервері.
-- [install_win11.md](./install_win11.md) — Інструкція з налаштування оточення на Windows.
+Головний вхід у документацію:
 
----
-**Stable Version Tag:** `v3.0-stable`
+[docs/README.md](./docs/README.md)
+
+Найважливіші розділи:
+
+- [Огляд проєкту](./docs/01-project-overview.md)
+- [Архітектура і структура коду](./docs/02-architecture.md)
+- [Локальна розробка](./docs/03-local-development.md)
+- [Адмінка і керування контентом](./docs/04-admin-content-management.md)
+- [Firebase і безпека](./docs/05-firebase-security.md)
+- [Google Drive, YouTube і Google Sheets](./docs/06-google-integrations.md)
+- [Перший деплой і VPS](./docs/07-deployment-vps.md)
+- [Оновлення сайту після доопрацювання](./docs/08-update-workflow.md)
+- [Бекап, rollback і troubleshooting](./docs/09-backup-rollback-troubleshooting.md)
+
+## Коротко про архітектуру
+
+- Frontend: React + Vite.
+- Дані: Firebase Realtime Database.
+- Production login: Firebase Authentication + allowlist `admins/{uid}`.
+- Локальний режим: `localStorage`.
+- Медіа: Google Drive і YouTube.
+- Додаткова статистика: Google Sheets через Apps Script.
+- Деплой: статична папка `dist/` на VPS.

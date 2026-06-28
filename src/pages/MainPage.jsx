@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 
-import { Layout, Image, FileText, Presentation, ClipboardCheck, Settings, LogOut, Sun, Moon, BarChart2, ChevronDown, ChevronUp, Menu, X as CloseIcon } from 'lucide-react';
-import { getAppConfig, getYoutubeVideoId, getGoogleDriveFolderId, getTestResults } from '../firebase';
-import QuizRunner from '../components/QuizRunner';
+import { Image, FileText, Presentation, ClipboardCheck, Settings, Sun, Moon, BarChart2, Menu } from 'lucide-react';
+import { getAppConfig, getYoutubeVideoId, getGoogleDriveFolderId, IS_LOCAL_DATA_MODE } from '../firebase';
+import { getSeasonLabel, getSortedSeasons } from '../seasonUtils';
+
+const LazyQuizRunner = lazy(() => import('../components/QuizRunner'));
+const LazyPhotoGallery = lazy(() => import('../components/PhotoGallery'));
+const LazyYoutubeGallery = lazy(() => import('../components/YoutubeGallery'));
+const LazyStatisticsView = lazy(() => import('../components/StatisticsView'));
 
 const SESSIONS = ["session1", "session2", "session3"];
 const SESSION_LABELS = { "session1": "Сесія 1", "session2": "Сесія 2", "session3": "Сесія 3" };
@@ -15,6 +20,13 @@ const ACTIONS = [
     { id: 'statistics', label: 'Статистика', icon: BarChart2, folder: 'статистика' },
 ];
 
+function ContentFallback({ label = 'Завантаження...' }) {
+    return (
+        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+            {label}
+        </div>
+    );
+}
 
 export default function MainPage() {
     const [activeSession, setActiveSession] = useState(SESSIONS[0]);
@@ -26,11 +38,22 @@ export default function MainPage() {
     const [loading, setLoading] = useState(true);
     const [theme, setTheme] = useState('dark');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
 
-    // Reset active quiz when switching session or tab
     useEffect(() => {
-        setActiveQuiz(null);
-    }, [activeSession, activeAction]);
+        let unsubscribe = () => {};
+        let cancelled = false;
+
+        import('../adminAuth').then(({ subscribeToAdminAuth }) => {
+            if (cancelled) return;
+            unsubscribe = subscribeToAdminAuth(user => setIsAdmin(Boolean(user)));
+        });
+
+        return () => {
+            cancelled = true;
+            unsubscribe();
+        };
+    }, []);
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -44,7 +67,10 @@ export default function MainPage() {
         getAppConfig().then(data => {
             if (data) {
                 setConfig(data);
-                if (data.currentSeason) setActiveSeason(data.currentSeason);
+                const initialSeason = data.seasons?.[data.currentSeason]
+                    ? data.currentSeason
+                    : getSortedSeasons(data.seasons)[0]?.[0];
+                if (initialSeason) setActiveSeason(initialSeason);
             }
             setLoading(false);
         });
@@ -59,6 +85,7 @@ export default function MainPage() {
 
         const currentSessionData = config.seasons[activeSeason]?.sessions[activeSession];
         if (!currentSessionData) return <div style={{ padding: '2rem', color: 'var(--text-secondary)' }}>Дані для цієї сесії відсутні.</div>;
+        const activeSeasonLabel = getSeasonLabel(activeSeason, config.seasons[activeSeason]);
 
         if (activeAction.id === 'photos' || activeAction.id === 'presentations') {
             const rawFolderId = activeAction.id === 'photos' ? currentSessionData.photos : currentSessionData.presentations;
@@ -68,7 +95,7 @@ export default function MainPage() {
 
             // Use custom gallery only for photos when API key is available
             if (activeAction.id === 'photos' && config.googleDriveApiKey) {
-                return <PhotoGallery folderId={folderId} apiKey={config.googleDriveApiKey} />;
+                return <LazyPhotoGallery key={`${activeSeason}-${activeSession}-${folderId}-${config.googleDriveApiKey}`} folderId={folderId} apiKey={config.googleDriveApiKey} />;
             }
 
             return (
@@ -94,7 +121,7 @@ export default function MainPage() {
 
             // Grid mode: playlist + API key
             if (listId && config.googleDriveApiKey) {
-                return <YoutubeGallery listId={listId} apiKey={config.googleDriveApiKey} />;
+                return <LazyYoutubeGallery key={`${activeSeason}-${activeSession}-${listId}-${config.googleDriveApiKey}`} listId={listId} apiKey={config.googleDriveApiKey} />;
             }
 
             // Fallback: single video or no API key
@@ -142,11 +169,13 @@ export default function MainPage() {
         if (activeAction.id === 'tests') {
             if (activeQuiz) {
                 return (
-                    <QuizRunner
+                    <LazyQuizRunner
                         testId={activeQuiz.id}
                         testUrl={activeQuiz.url}
                         testName={activeQuiz.name}
                         sessionName={SESSION_LABELS[activeSession]}
+                        seasonId={activeSeason}
+                        seasonName={activeSeasonLabel}
                         googleScriptUrl={config.googleScriptUrl}
                         onBack={() => setActiveQuiz(null)}
                     />
@@ -199,7 +228,18 @@ export default function MainPage() {
         }
 
         if (activeAction.id === 'statistics') {
-            return <StatisticsView activeSession={activeSession} activeSeason={activeSeason} />;
+            if (!isAdmin) {
+                return <div style={{ padding: '2rem', color: 'var(--text-secondary)' }}>Статистика доступна лише адміністратору.</div>;
+            }
+            return (
+                <LazyStatisticsView
+                    key={`${activeSeason}-${activeSession}`}
+                    sessionLabel={SESSION_LABELS[activeSession]}
+                    activeSeason={activeSeason}
+                    seasonName={activeSeasonLabel}
+                    tests={currentSessionData.tests}
+                />
+            );
         }
     };
 
@@ -220,7 +260,7 @@ export default function MainPage() {
             )}
 
             {/* Sidebar */}
-            <aside className={`glass ${isMobileMenuOpen ? 'mobile-open' : ''}`} style={{
+            <aside className={`main-sidebar glass ${isMobileMenuOpen ? 'mobile-open' : ''}`} style={{
                 width: 'var(--sidebar-width)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -230,13 +270,24 @@ export default function MainPage() {
                 position: 'relative'
             }}>
 
-                <div style={{ marginBottom: '3rem', padding: '0 1rem' }}>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>УМШ</h1>
+                <div style={{ marginBottom: '3rem', padding: '0 0.5rem', minWidth: 0 }}>
+                    <h1 style={{ fontSize: '1.25rem', lineHeight: 1.25, fontWeight: 'bold', color: 'var(--accent-color)', overflowWrap: 'anywhere' }}>
+                        {config?.seasons?.[activeSeason]
+                            ? getSeasonLabel(activeSeason, config.seasons[activeSeason])
+                            : 'УМШ'}
+                    </h1>
                     {config && config.seasons ? (
                         <select
                             value={activeSeason}
-                            onChange={(e) => setActiveSeason(e.target.value)}
+                            onChange={(e) => {
+                                setActiveSeason(e.target.value);
+                                setActiveQuiz(null);
+                            }}
                             style={{
+                                display: 'block',
+                                width: '100%',
+                                maxWidth: '100%',
+                                minWidth: 0,
                                 marginTop: '0.5rem',
                                 padding: '4px 8px',
                                 borderRadius: '8px',
@@ -248,21 +299,25 @@ export default function MainPage() {
                                 cursor: 'pointer'
                             }}
                         >
-                            {Object.keys(config.seasons).sort((a, b) => Number(a) - Number(b)).map(season => (
-                                <option key={season} value={season}>Сезон {season}</option>
+                            {getSortedSeasons(config.seasons).map(([seasonId, season]) => (
+                                <option key={seasonId} value={seasonId}>{getSeasonLabel(seasonId, season)}</option>
                             ))}
                         </select>
                     ) : (
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Сезон 12</p>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>УМШ 12</p>
+                    )}
+                    {IS_LOCAL_DATA_MODE && (
+                        <p style={{ marginTop: '0.5rem', color: '#f59e0b', fontSize: '0.7rem' }}>Локальні тестові дані</p>
                     )}
                 </div>
 
                 <nav style={{ flex: 1 }}>
-                    {ACTIONS.map(action => (
+                    {ACTIONS.filter(action => action.id !== 'statistics' || isAdmin).map(action => (
                         <button
                             key={action.id}
                             onClick={() => {
                                 setActiveAction(action);
+                                setActiveQuiz(null);
                                 setIsMobileMenuOpen(false);
                             }}
                             style={{
@@ -333,6 +388,8 @@ export default function MainPage() {
                     {/* Mobile Menu Toggle */}
                     <button
                         className="mobile-only"
+                        aria-label="Відкрити меню"
+                        aria-expanded={isMobileMenuOpen}
                         onClick={() => setIsMobileMenuOpen(true)}
                         style={{
                             position: 'absolute',
@@ -357,7 +414,10 @@ export default function MainPage() {
                         {SESSIONS.map(session => (
                             <button
                                 key={session}
-                                onClick={() => setActiveSession(session)}
+                                onClick={() => {
+                                    setActiveSession(session);
+                                    setActiveQuiz(null);
+                                }}
                                 style={{
                                     padding: '8px 16px',
                                     borderRadius: '99px',
@@ -400,11 +460,11 @@ export default function MainPage() {
 
                         <div style={{ flex: 1, background: 'var(--bg-color)', overflowY: 'auto', position: 'relative' }}>
                             {loading ? (
-                                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    Завантаження...
-                                </div>
+                                <ContentFallback />
                             ) : (
-                                renderContent()
+                                <Suspense fallback={<ContentFallback label="Завантаження розділу..." />}>
+                                    {renderContent()}
+                                </Suspense>
                             )}
                         </div>
                     </div>
@@ -418,13 +478,14 @@ export default function MainPage() {
         }
 
         @media (max-width: 1024px) {
-          aside {
+          .main-sidebar {
             position: fixed !important;
             height: 100vh;
-            width: 280px !important;
+            width: min(320px, 88vw) !important;
+            max-width: 88vw;
             transform: translateX(-100%);
           }
-          aside.mobile-open {
+          .main-sidebar.mobile-open {
             transform: translateX(0);
           }
           .header-responsive {
@@ -456,484 +517,5 @@ export default function MainPage() {
         }
       `}</style>
         </div >
-    );
-}
-
-function PhotoGallery({ folderId, apiKey }) {
-    const [photos, setPhotos] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [lightbox, setLightbox] = useState(null); // { id, name }
-
-    useEffect(() => {
-        setLoading(true);
-        setError(null);
-        setPhotos([]);
-
-        const fetchPhotos = async (pageToken, accumulated) => {
-            let url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+trashed=false&fields=nextPageToken,files(id,name,mimeType)&key=${apiKey}&pageSize=200&orderBy=name`;
-            if (pageToken) url += `&pageToken=${pageToken}`;
-
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`Drive API error: ${res.status}`);
-            const data = await res.json();
-
-            const images = (data.files || []).filter(f => f.mimeType?.startsWith('image/'));
-            const all = [...accumulated, ...images];
-
-            if (data.nextPageToken) {
-                return fetchPhotos(data.nextPageToken, all);
-            }
-            return all;
-        };
-
-        fetchPhotos(null, [])
-            .then(all => { setPhotos(all); setLoading(false); })
-            .catch(err => { setError(err.message); setLoading(false); });
-    }, [folderId, apiKey]);
-
-    const thumbUrl = (id) => `https://drive.google.com/thumbnail?id=${id}&sz=w260`;
-    const largeUrl = (id) => `https://drive.google.com/thumbnail?id=${id}&sz=s3000`;
-    const fullUrl = (id) => `https://drive.google.com/file/d/${id}/view`;
-
-    if (loading) {
-        return (
-            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
-                {Array.from({ length: 18 }).map((_, i) => (
-                    <div key={i} style={{
-                        aspectRatio: '1',
-                        borderRadius: '8px',
-                        background: 'rgba(255,255,255,0.06)',
-                        animation: 'pulse 1.4s ease-in-out infinite',
-                        animationDelay: `${i * 0.05}s`
-                    }} />
-                ))}
-                <style>{`@keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.9} }`}</style>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <p style={{ marginBottom: '0.5rem', color: '#ef4444' }}>Помилка завантаження галереї</p>
-                <p style={{ fontSize: '0.8rem', marginBottom: '1rem' }}>{error}</p>
-                <p style={{ fontSize: '0.8rem' }}>Перевірте Google Drive API Key в Адмін-панелі.</p>
-            </div>
-        );
-    }
-
-    if (photos.length === 0) {
-        return <div style={{ padding: '2rem', color: 'var(--text-secondary)', textAlign: 'center' }}>Фото не знайдено в цій папці.</div>;
-    }
-
-    return (
-        <>
-            {/* Photo Grid */}
-            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px', alignContent: 'start' }}>
-                {photos.map(photo => (
-                    <div
-                        key={photo.id}
-                        onClick={() => setLightbox(photo)}
-                        style={{
-                            aspectRatio: '1',
-                            borderRadius: '8px',
-                            overflow: 'hidden',
-                            cursor: 'pointer',
-                            background: 'rgba(255,255,255,0.04)',
-                            transition: 'transform 0.15s, box-shadow 0.15s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.4)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
-                    >
-                        <img
-                            src={thumbUrl(photo.id)}
-                            alt={photo.name}
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                            onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.style.background = 'rgba(255,255,255,0.08)'; }}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        />
-                    </div>
-                ))}
-            </div>
-
-            {/* Lightbox */}
-            {lightbox && (
-                <div
-                    onClick={() => setLightbox(null)}
-                    style={{
-                        position: 'fixed', inset: 0, zIndex: 1000,
-                        background: 'rgba(0,0,0,0.88)',
-                        display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center',
-                        padding: '1rem',
-                        backdropFilter: 'blur(8px)'
-                    }}
-                >
-                    <img
-                        src={largeUrl(lightbox.id)}
-                        alt={lightbox.name}
-                        referrerPolicy="no-referrer"
-                        onClick={e => e.stopPropagation()}
-                        style={{
-                            maxWidth: '90vw', maxHeight: '80vh',
-                            borderRadius: '12px',
-                            objectFit: 'contain',
-                            boxShadow: '0 8px 40px rgba(0,0,0,0.6)'
-                        }}
-                    />
-                    <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.875rem' }}>{lightbox.name}</span>
-                        <a
-                            href={fullUrl(lightbox.id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            style={{
-                                padding: '6px 16px', borderRadius: '8px',
-                                background: 'var(--accent-color)', color: 'white',
-                                textDecoration: 'none', fontSize: '0.8rem', fontWeight: 600
-                            }}
-                        >
-                            Відкрити повний розмір ↗
-                        </a>
-                        <button
-                            onClick={() => setLightbox(null)}
-                            style={{
-                                padding: '6px 16px', borderRadius: '8px',
-                                background: 'rgba(255,255,255,0.1)', color: 'white',
-                                border: 'none', fontSize: '0.8rem', cursor: 'pointer'
-                            }}
-                        >
-                            Закрити
-                        </button>
-                    </div>
-                </div>
-            )}
-        </>
-    );
-}
-
-function YoutubeGallery({ listId, apiKey }) {
-    const [videos, setVideos] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [activeVideo, setActiveVideo] = useState(null); // { videoId, title }
-
-    useEffect(() => {
-        setLoading(true);
-        setError(null);
-        setVideos([]);
-
-        const fetchAll = async (pageToken, accumulated) => {
-            let url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${listId}&maxResults=50&key=${apiKey}&fields=nextPageToken,items(snippet(title,resourceId/videoId,thumbnails/medium/url))`;
-            if (pageToken) url += `&pageToken=${pageToken}`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`YouTube API error: ${res.status}`);
-            const data = await res.json();
-            if (data.error) throw new Error(data.error.message);
-            const items = (data.items || []).map(item => ({
-                videoId: item.snippet.resourceId.videoId,
-                title: item.snippet.title,
-                thumb: item.snippet.thumbnails?.medium?.url
-                    || `https://img.youtube.com/vi/${item.snippet.resourceId.videoId}/mqdefault.jpg`
-            }));
-            const all = [...accumulated, ...items];
-            if (data.nextPageToken) return fetchAll(data.nextPageToken, all);
-            return all;
-        };
-
-        fetchAll(null, [])
-            .then(all => { setVideos(all); setLoading(false); })
-            .catch(err => { setError(err.message); setLoading(false); });
-    }, [listId, apiKey]);
-
-    if (loading) {
-        return (
-            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
-                {Array.from({ length: 9 }).map((_, i) => (
-                    <div key={i} style={{ borderRadius: '10px', overflow: 'hidden' }}>
-                        <div style={{ aspectRatio: '16/9', background: 'rgba(255,255,255,0.06)', animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.07}s` }} />
-                        <div style={{ height: '14px', margin: '8px 8px 4px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }} />
-                    </div>
-                ))}
-                <style>{`@keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.9} }`}</style>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <p style={{ marginBottom: '0.5rem', color: '#ef4444' }}>Помилка завантаження плейлисту</p>
-                <p style={{ fontSize: '0.8rem', marginBottom: '1rem' }}>{error}</p>
-                <p style={{ fontSize: '0.8rem' }}>Перевірте Google API Key та що YouTube Data API v3 увімкнений.</p>
-            </div>
-        );
-    }
-
-    if (videos.length === 0) {
-        return <div style={{ padding: '2rem', color: 'var(--text-secondary)', textAlign: 'center' }}>Відео не знайдено в плейлисті.</div>;
-    }
-
-    return (
-        <>
-            {/* Video Grid */}
-            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px', alignContent: 'start' }}>
-                {videos.map(video => (
-                    <div
-                        key={video.videoId}
-                        onClick={() => setActiveVideo(video)}
-                        style={{
-                            borderRadius: '10px',
-                            overflow: 'hidden',
-                            cursor: 'pointer',
-                            background: 'rgba(255,255,255,0.04)',
-                            transition: 'transform 0.15s, box-shadow 0.15s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.4)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; }}
-                    >
-                        {/* Thumbnail */}
-                        <div style={{ position: 'relative', aspectRatio: '16/9' }}>
-                            <img
-                                src={video.thumb}
-                                alt={video.title}
-                                loading="lazy"
-                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                            />
-                            {/* Play icon overlay */}
-                            <div style={{
-                                position: 'absolute', inset: 0,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                background: 'rgba(0,0,0,0.2)',
-                                transition: 'background 0.15s'
-                            }}>
-                                <div style={{
-                                    width: '36px', height: '36px',
-                                    background: 'rgba(255,0,0,0.85)',
-                                    borderRadius: '50%',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                }}>
-                                    <div style={{ width: 0, height: 0, borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderLeft: '12px solid white', marginLeft: '3px' }} />
-                                </div>
-                            </div>
-                        </div>
-                        {/* Title */}
-                        <div style={{
-                            padding: '8px 10px', fontSize: '0.8rem', fontWeight: 500, lineHeight: 1.3,
-                            overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'
-                        }}>
-                            {video.title}
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Video Lightbox */}
-            {activeVideo && (
-                <div
-                    onClick={() => setActiveVideo(null)}
-                    style={{
-                        position: 'fixed', inset: 0, zIndex: 1000,
-                        background: 'rgba(0,0,0,0.92)',
-                        display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center',
-                        padding: '1rem',
-                        backdropFilter: 'blur(8px)'
-                    }}
-                >
-                    <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '900px' }}>
-                        <iframe
-                            src={`https://www.youtube.com/embed/${activeVideo.videoId}?autoplay=1`}
-                            width="100%"
-                            style={{ aspectRatio: '16/9', border: 'none', borderRadius: '12px', display: 'block' }}
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                        />
-                        <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.875rem', flex: 1, marginRight: '1rem' }}>{activeVideo.title}</span>
-                            <button
-                                onClick={() => setActiveVideo(null)}
-                                style={{ padding: '6px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                            >
-                                Закрити
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </>
-    );
-}
-
-function StatisticsView({ activeSession, activeSeason }) {
-    const [results, setResults] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [expandedTests, setExpandedTests] = useState({}); // { testName: boolean }
-
-    useEffect(() => {
-        getTestResults().then(data => {
-            const sessionLabel = SESSION_LABELS[activeSession];
-            const filtered = data.filter(r => r.sessionName === sessionLabel);
-
-            // Deduplicate: same user, same test, same score, same minute
-            const unique = [];
-            const seen = new Set();
-            filtered.forEach(r => {
-                // Key includes timestamp truncated to the minute to catch double submissions
-                const minuteStamp = r.timestamp ? r.timestamp.substring(0, 16) : '';
-                const key = `${r.userName}-${r.testId || r.testName}-${r.score}-${minuteStamp}`;
-                if (!seen.has(key)) {
-                    unique.push(r);
-                    seen.add(key);
-                }
-            });
-
-            setResults(unique);
-            setLoading(false);
-        });
-    }, [activeSession]);
-
-    const toggleExpand = (testName) => {
-        setExpandedTests(prev => ({
-            ...prev,
-            [testName]: !prev[testName]
-        }));
-    };
-
-    if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Завантаження статистики...</div>;
-
-    if (results.length === 0) {
-        return (
-            <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <BarChart2 size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
-                <p>Статистика для цієї сесії поки порожня.</p>
-            </div>
-        );
-    }
-
-    // --- Aggregate Stats ---
-    const totalRespondents = new Set(results.map(r => r.userName)).size;
-    const scores = results.map(r => r.score);
-    const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-    const maxScore = Math.max(...scores);
-    const minScore = Math.min(...scores);
-
-    // --- Grouping by Test Name ---
-    const groupedResults = results.reduce((acc, curr) => {
-        if (!acc[curr.testName]) acc[curr.testName] = [];
-        acc[curr.testName].push(curr);
-        return acc;
-    }, {});
-
-    const testSummaries = Object.keys(groupedResults).map(testName => {
-        const testGroup = groupedResults[testName];
-        const testAvg = Math.round(testGroup.reduce((acc, curr) => acc + curr.score, 0) / testGroup.length);
-        return { name: testName, avg: testAvg, attempts: testGroup };
-    });
-
-    return (
-        <div className="fade-in" style={{ padding: '1.5rem', height: '100%', overflowY: 'auto' }}>
-            {/* Aggregate Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-                <div className="glass" style={{ padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.25rem' }}>Усього респондентів</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{totalRespondents}</div>
-                </div>
-                <div className="glass" style={{ padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.25rem' }}>Середній бал</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>{avgScore}%</div>
-                </div>
-                <div className="glass" style={{ padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.25rem' }}>Найвищий бал</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#10b981' }}>{maxScore}%</div>
-                </div>
-                <div className="glass" style={{ padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.25rem' }}>Найнижчий бал</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>{minScore}%</div>
-                </div>
-            </div>
-
-            {/* Test List */}
-            <div style={{ display: 'grid', gap: '1rem' }}>
-                {testSummaries.map((test, idx) => (
-                    <div key={idx} style={{ transition: 'all 0.3s ease' }}>
-                        {/* Summary Row */}
-                        <div
-                            className="glass"
-                            onClick={() => toggleExpand(test.name)}
-                            style={{
-                                padding: '1.25rem 1.5rem',
-                                borderRadius: '16px',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                cursor: 'pointer',
-                                border: expandedTests[test.name] ? '1px solid var(--accent-color)' : '1px solid var(--glass-border)',
-                                background: expandedTests[test.name] ? 'rgba(99, 102, 241, 0.05)' : 'var(--glass-bg)'
-                            }}
-                        >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                {expandedTests[test.name] ? <ChevronDown size={20} /> : <ChevronUp style={{ transform: 'rotate(90deg)' }} size={20} />}
-                                <span style={{ fontWeight: 600, fontSize: '1rem' }}>{test.name}</span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                                <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Середній результат</div>
-                                    <div style={{ fontWeight: 700, color: 'var(--accent-color)' }}>{test.avg}%</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Detailed Table (Expanded) */}
-                        {expandedTests[test.name] && (
-                            <div className="fade-in" style={{
-                                marginTop: '0.5rem',
-                                marginLeft: '0.5rem',
-                                background: 'rgba(0,0,0,0.1)',
-                                borderRadius: '12px',
-                                overflow: 'hidden',
-                                borderLeft: '3px solid var(--accent-color)'
-                            }}>
-                                <div style={{ overflowX: 'auto' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem', minWidth: '400px' }}>
-                                        <thead>
-                                            <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--glass-border)' }}>
-                                                <th style={{ padding: '10px 16px', color: 'var(--text-secondary)' }}>Користувач</th>
-                                                <th style={{ padding: '10px 16px', color: 'var(--text-secondary)' }}>Результат</th>
-                                                <th style={{ padding: '10px 16px', color: 'var(--text-secondary)' }}>Дата</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {test.attempts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).map((res, i) => (
-                                                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                    <td style={{ padding: '10px 16px', fontWeight: 500 }}>{res.userName}</td>
-                                                    <td style={{ padding: '10px 16px' }}>
-                                                        <span style={{
-                                                            padding: '2px 8px',
-                                                            borderRadius: '6px',
-                                                            background: res.score >= 60 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                                            color: res.score >= 60 ? '#10b981' : '#ef4444',
-                                                            fontWeight: 600
-                                                        }}>
-                                                            {res.score}%
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '10px 16px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                                                        {new Date(res.timestamp).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
-        </div>
     );
 }

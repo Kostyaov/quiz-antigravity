@@ -1,6 +1,7 @@
 // Firebase "mock" implementation until real credentials are provided
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, get, set, push } from "firebase/database";
+import { createDefaultConfig } from './defaultConfig';
 
 // TEMPORARY: Placeholder config. User will need to replace this with real data.
 const firebaseConfig = {
@@ -15,24 +16,32 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const IS_CONFIGURED = firebaseConfig.apiKey !== "YOUR_API_KEY" && firebaseConfig.apiKey !== "";
+const DATA_MODE = import.meta.env.VITE_DATA_MODE || (import.meta.env.DEV ? 'local' : 'firebase');
+const USE_FIREBASE = DATA_MODE === 'firebase' && IS_CONFIGURED;
 
-let db = null;
-if (IS_CONFIGURED) {
-  const app = initializeApp(firebaseConfig);
-  db = getDatabase(app);
+export const IS_LOCAL_DATA_MODE = !USE_FIREBASE;
+export const USE_FIREBASE_DATA = USE_FIREBASE;
+
+export let firebaseApp = null;
+export let firebaseDatabase = null;
+if (USE_FIREBASE) {
+  firebaseApp = initializeApp(firebaseConfig);
+  firebaseDatabase = getDatabase(firebaseApp);
 }
 
+const db = firebaseDatabase;
+
 export const getAppConfig = async () => {
-  if (!IS_CONFIGURED) {
+  if (!USE_FIREBASE) {
     const data = localStorage.getItem('app_config');
-    return data ? JSON.parse(data) : null;
+    return data ? JSON.parse(data) : createDefaultConfig();
   }
   const snapshot = await get(ref(db, 'config'));
   return snapshot.val() || null;
 };
 
 export const saveAppConfig = async (config) => {
-  if (!IS_CONFIGURED) {
+  if (!USE_FIREBASE) {
     localStorage.setItem('app_config', JSON.stringify(config));
     return;
   }
@@ -45,7 +54,7 @@ export const saveAppConfig = async (config) => {
 };
 
 export const saveTestResult = async (result) => {
-  if (!IS_CONFIGURED) {
+  if (!USE_FIREBASE) {
     const existing = JSON.parse(localStorage.getItem('test_results') || '[]');
     existing.push(result);
     localStorage.setItem('test_results', JSON.stringify(existing));
@@ -59,30 +68,12 @@ export const saveTestResult = async (result) => {
   }
 };
 
-export const isNameTaken = async (name) => {
-  const normalizedName = name.trim().toLowerCase();
-
-  if (!IS_CONFIGURED) {
-    const existing = JSON.parse(localStorage.getItem('test_results') || '[]');
-    return existing.some(r => r.userName && r.userName.trim().toLowerCase() === normalizedName);
-  }
-
-  try {
-    const snapshot = await get(ref(db, 'results'));
-    if (!snapshot.exists()) return false;
-
-    const results = snapshot.val();
-    return Object.values(results).some(r =>
-      r.userName && r.userName.trim().toLowerCase() === normalizedName
-    );
-  } catch (err) {
-    console.error("Error checking name uniqueness:", err);
-    return false;
-  }
-};
-
 export const deleteTestResults = async (testId) => {
-  if (!IS_CONFIGURED) return;
+  if (!USE_FIREBASE) {
+    const existing = JSON.parse(localStorage.getItem('test_results') || '[]');
+    localStorage.setItem('test_results', JSON.stringify(existing.filter(result => result.testId !== testId)));
+    return;
+  }
   try {
     const snapshot = await get(ref(db, 'results'));
     if (!snapshot.exists()) return;
@@ -104,7 +95,7 @@ export const deleteTestResults = async (testId) => {
 };
 
 export const getTestResults = async () => {
-  if (!IS_CONFIGURED) {
+  if (!USE_FIREBASE) {
     const data = localStorage.getItem('test_results');
     return data ? JSON.parse(data) : [];
   }
@@ -119,7 +110,6 @@ export const getYoutubeVideoId = (url) => {
   if (!url) return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
   const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : null;
   return (match && match[2].length === 11) ? match[2] : null;
 };
 
@@ -168,7 +158,7 @@ export const getGoogleDriveDirectLink = (url) => {
 };
 
 export const saveQuizContent = async (quizData) => {
-  if (!IS_CONFIGURED) {
+  if (!USE_FIREBASE) {
     const id = crypto.randomUUID();
     const existing = JSON.parse(localStorage.getItem('quizzes') || '{}');
     existing[id] = quizData;
@@ -185,7 +175,7 @@ export const saveQuizContent = async (quizData) => {
 };
 
 export const getQuizContent = async (quizId) => {
-  if (!IS_CONFIGURED) {
+  if (!USE_FIREBASE) {
     const existing = JSON.parse(localStorage.getItem('quizzes') || '{}');
     return existing[quizId] || null;
   }
@@ -199,7 +189,7 @@ export const getQuizContent = async (quizId) => {
 };
 
 export const deleteQuizContent = async (quizId) => {
-  if (!IS_CONFIGURED) {
+  if (!USE_FIREBASE) {
     const existing = JSON.parse(localStorage.getItem('quizzes') || '{}');
     delete existing[quizId];
     localStorage.setItem('quizzes', JSON.stringify(existing));
@@ -212,5 +202,3 @@ export const deleteQuizContent = async (quizId) => {
     throw err;
   }
 };
-
-export const ADMIN_PASSWORD = "admin123"; // Initial fixed password as requested

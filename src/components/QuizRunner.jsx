@@ -1,11 +1,37 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Check, X, AlertCircle, Loader2 } from 'lucide-react';
-import { getGoogleDriveDirectLink, saveTestResult, isNameTaken, getQuizContent } from '../firebase';
+import { getGoogleDriveDirectLink, saveTestResult, getQuizContent } from '../firebase';
 
 const STORAGE_PREFIX = 'quiz_v1_';
 
-export default function QuizRunner({ testId, testUrl, testName, sessionName, googleScriptUrl, onBack }) {
+const getGoogleSheetName = (seasonName, sessionName) => {
+    const combinedName = [seasonName, sessionName].filter(Boolean).join(' — ') || 'Загальне';
+    const forbiddenCharacters = new Set(['\\', '/', ':', '?', '*', '[', ']']);
+    return Array.from(combinedName, character => forbiddenCharacters.has(character) ? '-' : character)
+        .join('')
+        .slice(0, 100);
+};
+
+const shuffleArray = (array) => {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+};
+
+const calculateScore = (currentAnswers, quiz) => {
+    let correct = 0;
+    currentAnswers.forEach((ansIndex, qIndex) => {
+        if (ansIndex !== null && quiz[qIndex].answerOptions[ansIndex].isCorrect) {
+            correct++;
+        }
+    });
+    return Math.round((correct / quiz.length) * 100);
+};
+
+export default function QuizRunner({ testId, testUrl, testName, sessionName, seasonId, seasonName, googleScriptUrl, onBack }) {
     const [quizData, setQuizData] = useState(null);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [answers, setAnswers] = useState([]);
@@ -17,21 +43,23 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
     const [view, setView] = useState('quiz'); // 'quiz' or 'results'
     const [startTime, setStartTime] = useState(null);
     const [userName, setUserName] = useState(localStorage.getItem('user_name') || '');
-    const [showNamePrompt, setShowNamePrompt] = useState(false);
+    const [showNamePrompt, setShowNamePrompt] = useState(() => !localStorage.getItem('user_name'));
     const [finishing, setFinishing] = useState(false);
-    const [checkingName, setCheckingName] = useState(false);
-    const [nameError, setNameError] = useState('');
     const finishGuardRef = useRef(false);
 
     // Initial Load
     useEffect(() => {
-        const name = localStorage.getItem('user_name');
-        if (!name) {
-            setShowNamePrompt(true);
-        }
-
         const loadQuiz = async () => {
             setLoading(true);
+            const initializeQuizState = (length) => {
+                setAnswers(new Array(length).fill(null));
+                setHints(new Array(length).fill(false));
+                setCurrentQuestionIndex(0);
+                setStartTime(Date.now());
+                setIsCompleted(false);
+                setView('quiz');
+                setScore(0);
+            };
             try {
                 // 1. Fetch Quiz Data
                 let data;
@@ -130,10 +158,10 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
                         }
                     } else {
                         // Reset if length mismatch
-                        initializeState(data.quiz.length);
+                        initializeQuizState(data.quiz.length);
                     }
                 } else {
-                    initializeState(data.quiz.length);
+                    initializeQuizState(data.quiz.length);
                 }
 
             } catch (err) {
@@ -160,36 +188,7 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
             startTime
         };
         localStorage.setItem(`${STORAGE_PREFIX}${testId}`, JSON.stringify(state));
-    }, [answers, hints, currentQuestionIndex, isCompleted, quizData, testId, startTime]);
-
-    const shuffleArray = (array) => {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-        return array;
-    };
-
-
-    const initializeState = (length) => {
-        setAnswers(new Array(length).fill(null));
-        setHints(new Array(length).fill(false));
-        setCurrentQuestionIndex(0);
-        setStartTime(Date.now());
-        setIsCompleted(false);
-        setView('quiz');
-        setScore(0);
-    };
-
-    const calculateScore = (currentAnswers, quiz) => {
-        let correct = 0;
-        currentAnswers.forEach((ansIndex, qIndex) => {
-            if (ansIndex !== null && quiz[qIndex].answerOptions[ansIndex].isCorrect) {
-                correct++;
-            }
-        });
-        return Math.round((correct / quiz.length) * 100);
-    };
+    }, [answers, hints, currentQuestionIndex, isCompleted, quizData, testId, startTime, view]);
 
     const handleAnswer = (optionIndex) => {
         if (isCompleted || answers[currentQuestionIndex] !== null) return;
@@ -232,7 +231,10 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
             try {
                 const payload = {
                     testName: testName || "Без назви",
-                    sessionName: sessionName || "Загальна",
+                    sessionName: getGoogleSheetName(seasonName, sessionName),
+                    sessionLabel: sessionName || "Загальна",
+                    seasonId: seasonId || "legacy",
+                    seasonName: seasonName || "Без навчального циклу",
                     userName: userName || "Анонім",
                     score: calculatedScore,
                     correctAnswers: answers.filter((ans, i) => ans !== null && quizData.quiz[i].answerOptions[ans].isCorrect).length,
@@ -260,6 +262,8 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
                 testId: testId || "unknown",
                 testName: testName || "Без назви",
                 sessionName: sessionName || "Загальна",
+                seasonId: seasonId || "legacy",
+                seasonName: seasonName || "Без навчального циклу",
                 userName: userName || "Анонім",
                 score: calculatedScore,
                 correctAnswers: answers.filter((ans, i) => ans !== null && quizData.quiz[i].answerOptions[ans].isCorrect).length,
@@ -296,33 +300,28 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
                         type="text"
                         placeholder="Ваше ім'я"
                         value={userName}
-                        onChange={(e) => {
-                            setUserName(e.target.value);
-                            setNameError('');
-                        }}
-                        onKeyPress={async (e) => {
-                            if (e.key === 'Enter' && userName.trim() && !checkingName) {
+                        onChange={(e) => setUserName(e.target.value)}
+                        onKeyPress={(e) => {
+                            if (e.key === 'Enter' && userName.trim()) {
                                 handleStart();
                             }
                         }}
                         style={{
-                            padding: '12px 16px', borderRadius: '12px', border: nameError ? '1px solid #ef4444' : '1px solid var(--glass-border)',
+                            padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--glass-border)',
                             background: 'rgba(255,255,255,0.03)', color: 'white', textAlign: 'center', outline: 'none'
                         }}
                     />
-                    {nameError && <p style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '-0.5rem' }}>{nameError}</p>}
                     <button
-                        disabled={!userName.trim() || checkingName}
+                        disabled={!userName.trim()}
                         onClick={handleStart}
                         style={{
                             padding: '12px', borderRadius: '12px', border: 'none',
                             background: 'var(--accent-color)', color: 'white', fontWeight: 600,
-                            opacity: (userName.trim() && !checkingName) ? 1 : 0.5, cursor: (userName.trim() && !checkingName) ? 'pointer' : 'not-allowed',
+                            opacity: userName.trim() ? 1 : 0.5, cursor: userName.trim() ? 'pointer' : 'not-allowed',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
                         }}
                     >
-                        {checkingName && <Loader2 size={16} className="animate-spin" />}
-                        {checkingName ? 'Перевірка...' : 'Почати тест'}
+                        Почати тест
                     </button>
                     <button
                         onClick={onBack}
@@ -335,27 +334,10 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, goo
         );
     }
 
-    async function handleStart() {
-        if (!userName.trim() || checkingName) return;
-
-        setCheckingName(true);
-        setNameError('');
-        try {
-            const taken = await isNameTaken(userName.trim());
-            if (taken) {
-                setNameError('Це ім\'я вже зайняте в цьому тесті. Будь ласка, оберіть інше.');
-                return;
-            }
-            localStorage.setItem('user_name', userName.trim());
-            setShowNamePrompt(false);
-        } catch (err) {
-            console.error("Name check error:", err);
-            // On error, let them through to avoid blocking
-            localStorage.setItem('user_name', userName.trim());
-            setShowNamePrompt(false);
-        } finally {
-            setCheckingName(false);
-        }
+    function handleStart() {
+        if (!userName.trim()) return;
+        localStorage.setItem('user_name', userName.trim());
+        setShowNamePrompt(false);
     }
 
     if (error) {

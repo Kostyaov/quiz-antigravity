@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "security:check": "node scripts/check-security.mjs",
+    "deploy:vps": "bash scripts/deploy-vps.sh",
+    "deploy:vps:dry-run": "bash scripts/deploy-vps.sh --dry-run",
     "preview": "vite preview"
   },
   "dependencies": {
