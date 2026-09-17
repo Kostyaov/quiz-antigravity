@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 import { Image, FileText, Presentation, ClipboardCheck, Settings, Sun, Moon, BarChart2, Menu } from 'lucide-react';
 import { getAppConfig, getYoutubeVideoId, getGoogleDriveFolderId, IS_LOCAL_DATA_MODE } from '../firebase';
@@ -360,7 +361,7 @@ export default function MainPage() {
                     {theme === 'dark' ? 'Світла тема' : 'Темна тема'}
                 </button>
 
-                <a href="/admin" style={{
+                <Link to="/admin" style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '12px',
@@ -371,7 +372,7 @@ export default function MainPage() {
                 }}>
                     <Settings size={18} />
                     Адмін панель
-                </a>
+                </Link>
             </aside>
 
             {/* Main Content */}

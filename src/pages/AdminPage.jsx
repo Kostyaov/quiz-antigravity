@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Lock, Save, ArrowLeft, Loader2, Plus, LogOut, Download, Upload, RotateCcw } from 'lucide-react';
 import { getAppConfig, saveAppConfig, deleteTestResults, saveQuizContent, deleteQuizContent, IS_LOCAL_DATA_MODE } from '../firebase';
 import { signInAdmin, signOutAdmin, subscribeToAdminAuth } from '../adminAuth';
@@ -127,6 +128,7 @@ const normalizeImportedConfig = (rawConfig) => {
 };
 
 export default function AdminPage() {
+    const navigate = useNavigate();
     const importConfigInputRef = useRef(null);
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [authChecked, setAuthChecked] = useState(false);
@@ -326,7 +328,10 @@ export default function AdminPage() {
     );
 
     const handleNavigateHome = (event) => {
-        if (!confirmDiscardChanges()) event.preventDefault();
+        event.preventDefault();
+        if (confirmDiscardChanges()) {
+            navigate('/');
+        }
     };
 
     const cleanupDeletedTests = async (testsToDelete) => {

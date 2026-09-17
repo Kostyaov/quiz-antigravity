@@ -6,7 +6,7 @@ const AdminPage = lazy(() => import('./pages/AdminPage'));
 
 function App() {
   return (
-    <Router>
+    <Router basename={import.meta.env.BASE_URL}>
       <Routes>
         <Route path="/" element={<MainPage />} />
         <Route path="/admin" element={(

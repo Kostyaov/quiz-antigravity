@@ -85,6 +85,11 @@ export default function QuizRunner({ testId, testUrl, testName, sessionName, sea
                         normalizedUrl = normalizedUrl.replace('public/', '/');
                     }
 
+                    const baseUrl = import.meta.env.BASE_URL || '/';
+                    if (normalizedUrl.startsWith('/') && baseUrl !== '/' && !normalizedUrl.startsWith(baseUrl)) {
+                        normalizedUrl = `${baseUrl.replace(/\/$/, '')}${normalizedUrl}`;
+                    }
+
                     // Convert Google Drive view links to direct download links if necessary
                     let directUrl = getGoogleDriveDirectLink(normalizedUrl);
 
